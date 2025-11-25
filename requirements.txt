@@ -1,2 +1,4 @@
 flask
-flask-session
+Flask-Session
+requests
+werkzeug
