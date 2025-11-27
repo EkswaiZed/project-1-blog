@@ -173,5 +173,45 @@ def create_post():
     
     return render_template('create_post.html')
 
+@app.route("/post/<int:post_id>")
+@login_required
+def view_post(post_id):
+    post = db.get_or_404(Post, post_id)
+    return render_template("view_post.html", post=post)
+
+@app.route("/edit/<int:post_id>", methods=["GET", "POST"])
+@login_required
+def edit_post(post_id):
+    post = db.get_or_404(Post, post_id)
+
+    if post.user_id != session["user_id"]:
+        flash("You can only edit your own posts")
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        post.title = request.form.get("title")
+        post.content = request.form.get("content")
+        db.session.commit() 
+
+        flash("Post updated successfully!")   
+        return redirect(url_for("view_post", post_id=post.id))
+
+    return render_template('edit_post.html', post=post)
+
+@app.route("/delete/<int:post_id>")    
+@login_required
+def delete_post(post_id):
+    post = db.get_or_404(Post, post_id)
+
+    if post.author.id != session["user_id"]:
+        flash("You can only delete your own posts!")
+        return redirect(url_for("index"))
+
+    db.session.delete(post)
+    db.session.commit()
+
+    flash("Post deleted successfully!")
+    return redirect(url_for("index"))    
+
 if __name__ == '__main__':
     app.run(debug=True)
