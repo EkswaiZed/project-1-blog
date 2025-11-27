@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
-from helpers import apology
+from helpers import apology, login_required
 
 class Base(DeclarativeBase):
   pass
@@ -58,11 +58,18 @@ def after_request(response):
     return response
 
 @app.route("/")
+@login_required
 def index():
+    user_id = session["user_id"]
+    
+    username = db.session.execute(
+        db.select(User.username).where(User.id == user_id)
+    ).scalar_one_or_none()
+    
     posts = db.session.execute(
         db.select(Post).order_by(Post.date_created.desc())
     ).scalars().all()
-    return render_template("index.html", posts=posts)
+    return render_template("index.html", posts=posts, username=username)
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -98,12 +105,73 @@ def register():
         except IntegrityError:
             return apology("username or email are already taken", 400)
 
-        return redirect("/login")
+        return redirect("/")
 
     else:
         return render_template("register.html")   
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    
+    # Forget any user_id
+    session.clear()
 
+    if request.method == "POST":
+        if not request.form.get("username"):
+            return apology("must provide username", 403)
+
+        if not request.form.get("password"):
+            return apology("must provide password", 403)
+
+        user = db.session.execute(
+            db.select(User).filter_by(username=request.form.get("username"))
+                ).scalar_one_or_none()
+        
+        if user is None or not check_password_hash(
+            user.password, request.form.get("password")
+        ):
+            return apology("invalid username and/or password", 403)
+
+        # Remember which user has logged in
+        session['user_id'] = user.id
+        session['username'] = user.username
+        flash('Login successful!')
+
+        return redirect("/")
+    
+    # User reached route via GET (as by clicking a link or via redirect)
+    else:
+        return render_template("login.html")    
+
+@app.route("/logout")
+def logout():
+    """Log user out"""
+
+    # Forget any user_id
+    session.clear()
+    flash('Logged out successfully!')
+    # Redirect user to login form
+    return redirect("/login")
+
+@app.route("/create", methods=["GET", "POST"])
+@login_required
+def create_post():
+    if 'user_id' not in session:
+        flash('Please login first!')
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        title = request.form.get('title')
+        content = request.form.get('content')
+        
+        new_post = Post(title=title, content=content, user_id=session['user_id'])
+        db.session.add(new_post)
+        db.session.commit()
+        
+        flash('Post created successfully!')
+        return redirect(url_for('index'))
+    
+    return render_template('create_post.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
